@@ -179,8 +179,7 @@ test('clearing the stage shows the clear screen then the ending', () => {
   assert.equal(s.state, 'ending');
 });
 
-test('stage two hands over to stage three when Mario walks into the opened gate', () => {
-  const stage = new ContraStage();
+test('stage two hands over to stage three when Mario walks into the opened gate', () => {  const stage = new ContraStage();
   stage.boss.hp = 1;
   stage.damageBoss(1);
   assert.equal(stage.thirdLevelEntrance.open, true);
@@ -200,3 +199,88 @@ test('a closed gate cannot be entered', () => {
   stage.update(input());
   assert.equal(stage.exitReady, false);
 });
+
+// ---------------- 手感与难度标定（防止后续调参破坏公平性） ----------------
+
+function measureJump() {
+  const s = new AdventureStage({ godMode: true });
+  s.state = 'play';
+  s.player.x = 60;
+  for (let i = 0; i < 60; i++) s.update(input({ right: true }));
+  const x0 = s.player.x;
+  const y0 = s.player.y;
+  let apex = 0;
+  for (let i = 0; i < 200; i++) {
+    s.update(input({ right: true, jump: true, jumpPressed: i === 0 }));
+    apex = Math.max(apex, y0 - s.player.y);
+    if (i > 3 && s.player.onGround) break;
+  }
+  return { width: s.player.x - x0, apex };
+}
+
+test('a held jump clears every water gap with a comfortable margin', () => {
+  const { width, apex } = measureJump();
+  assert.ok(width > 110, `跳跃水平射程 ${width.toFixed(1)}px 过短`);
+  assert.ok(apex > 100, `跳跃高度 ${apex.toFixed(1)}px 过低`);
+  for (const pit of STAGE.pits) {
+    const margin = width - pit.w;
+    assert.ok(margin >= 24, `水沟 x=${pit.x} 宽 ${pit.w}px 仅剩 ${margin.toFixed(1)}px 余量，容错过低`);
+  }
+});
+
+test('every water gap has enough flat runway before it to build up speed', () => {
+  for (const pit of STAGE.pits) {
+    const blocking = STAGE.platforms.filter((q) => q.x + q.w > pit.x - 110 && q.x < pit.x + pit.w);
+    assert.equal(blocking.length, 0, `水沟 x=${pit.x} 前 110px 内有平台，落地即入水`);
+  }
+});
+
+test('the vitality meter empties in roughly 40 seconds of play', () => {
+  const s = new AdventureStage();
+  s.state = 'play';
+  s.fruits.forEach((f) => { f.alive = false; });
+  s.eggs.forEach((e) => { e.alive = false; });
+  s.enemies.forEach((e) => { e.alive = false; });
+  let frames = 0;
+  while (s.state === 'play' && frames < 4000) {
+    s.update(input());
+    frames++;
+  }
+  const seconds = frames / 60;
+  assert.ok(seconds > 36 && seconds < 46, `满槽续航 ${seconds.toFixed(1)}s 偏离 40s 标定，饥饿压力会失衡`);
+});
+
+test('coyote time lets Mario jump shortly after running off a ledge', () => {
+  const s = new AdventureStage();
+  s.state = 'play';
+  const plat = s.platforms[0];
+  s.player.x = plat.x + plat.w - s.player.w - 2;
+  s.player.y = plat.y - s.player.h;
+  s.player.onGround = true;
+  let guard = 0;
+  while (s.player.onGround && guard < 40) {
+    s.update(input({ right: true }));
+    guard++;
+  }
+  assert.equal(s.player.onGround, false, '应已离开平台');
+  assert.ok(s.player.coyote > 0, '离开边缘后应仍有土狼时间');
+  s.update(input({ jumpPressed: true, jump: true }));
+  assert.ok(s.player.vy < 0, '离开边缘后 6 帧内仍应能起跳');
+});
+
+test('jump buffering allows a jump pressed just before landing', () => {
+  const s = new AdventureStage();
+  s.state = 'play';
+  s.player.x = 200;
+  s.player.y = 300;
+  s.player.vy = 6;
+  s.player.onGround = false;
+  s.player.jumpBuffer = 6;
+  let landed = false;
+  for (let i = 0; i < 40 && !landed; i++) {
+    s.update(input());
+    if (s.player.onGround) landed = true;
+  }
+  assert.equal(landed, true);
+});
+

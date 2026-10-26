@@ -16,7 +16,12 @@ const RUN_MAX = 2.9;
 const BOARD_MAX = 4.6;
 const JUMP_V = -10.8;
 const VITAL_MAX = 12;
-const VITAL_DRAIN = 0.0021;      // 约 5700 帧（95 秒）耗尽满槽
+// 体力衰减标定（40 秒耗尽满槽）：
+//   熟练直通约 18 秒到 Boss、整关约 38 秒 → 全程不吃补给会在 Boss 战中饿死；
+//   正常顺路吃水果/牛奶则始终有余量。水果因此是必需而非装饰。
+const VITAL_DRAIN = 0.0050;
+const COYOTE_FRAMES = 6;         // 土狼时间：踏空后仍可起跳的宽限帧
+const JUMP_BUFFER = 6;           // 跳跃预输入：落地前按下也能生效
 const ENEMY_SIZE = { snail: [22, 16], snake: [26, 14], frog: [20, 18], bat: [20, 14] };
 const WEAPON_LIMIT = 2;
 
@@ -41,6 +46,7 @@ export class AdventureStage {
       vx: 0, vy: 0, onGround: false, facing: 1, anim: 0,
       invuln: 0, weapon: c.weapon === 'axe' || c.weapon === 'fire' ? c.weapon : null,
       board: false, fairy: 0, vital: VITAL_MAX, dead: false,
+      jumpBuffer: 0, coyote: 0,
     };
     this.state = 'intro';
     this.stateT = 0;
@@ -201,9 +207,17 @@ export class AdventureStage {
       p.vx = clamp(p.vx, -RUN_MAX, RUN_MAX);
     }
 
-    if (input.jumpPressed && p.onGround) {
+    if (input.jumpPressed) p.jumpBuffer = JUMP_BUFFER;
+    else if (p.jumpBuffer > 0) p.jumpBuffer--;
+
+    if (p.onGround) p.coyote = COYOTE_FRAMES;
+    else if (p.coyote > 0) p.coyote--;
+
+    if (p.jumpBuffer > 0 && p.coyote > 0) {
       p.vy = JUMP_V;
       p.onGround = false;
+      p.jumpBuffer = 0;
+      p.coyote = 0;
     }
     if (!input.jump && p.vy < -4) p.vy = -4;   // 可变跳高
     p.vy = Math.min(MAX_FALL, p.vy + GRAVITY);
