@@ -1,0 +1,9 @@
+{
+  "name": "super-mario-web",
+  "version": "0.1.0",
+  "description": "网页版超级玛丽：原生 JS + Canvas 复刻经典核心玩法，零依赖零构建",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000"
+  }
+}
